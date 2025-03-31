@@ -1,3 +1,5 @@
+using FinancialPriceFeed;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Register configuration and logging services.
