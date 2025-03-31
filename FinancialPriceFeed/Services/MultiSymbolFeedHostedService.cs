@@ -9,10 +9,13 @@ public class MultiSymbolFeedHostedService : IHostedService
     private readonly IServiceProvider _serviceProvider;
     private readonly IConfiguration _configuration;
     private readonly ILogger<MultiSymbolFeedHostedService> _logger;
-    private readonly List<IPriceFeedStrategy> _strategies = new List<IPriceFeedStrategy>();
+    private readonly List<IPriceFeedStrategy> _strategies = new();
     private CancellationTokenSource? _cts;
 
-    public MultiSymbolFeedHostedService(IServiceProvider serviceProvider, IConfiguration configuration, ILogger<MultiSymbolFeedHostedService> logger)
+    public MultiSymbolFeedHostedService(
+        IServiceProvider serviceProvider,
+        IConfiguration configuration,
+        ILogger<MultiSymbolFeedHostedService> logger)
     {
         _serviceProvider = serviceProvider;
         _configuration = configuration;
@@ -22,20 +25,27 @@ public class MultiSymbolFeedHostedService : IHostedService
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        var mapping = _configuration.GetSection("PriceFeed:Symbols").Get<Dictionary<string, string>>() ?? new Dictionary<string, string>();
+        var mapping = _configuration
+            .GetSection("PriceFeed:Symbols")
+            .Get<Dictionary<string, string>>() ?? new();
 
-        // Create a Binance strategy instance for each provider symbol.
+        // Create a BinancePriceFeedStrategy instance for each provider symbol
         foreach (var providerSymbol in mapping.Keys)
         {
             try
             {
-                // Use ActivatorUtilities to pass the symbol parameter.
-                var strategy = ActivatorUtilities.CreateInstance<BinancePriceFeedStrategy>(_serviceProvider, providerSymbol);
-                // Optionally subscribe to PriceUpdated events here.
+                // Use ActivatorUtilities to pass the symbol parameter into the constructor
+                var strategy = ActivatorUtilities.CreateInstance<BinancePriceFeedStrategy>(
+                    _serviceProvider,
+                    providerSymbol
+                );
+
+                // Optionally subscribe to the PriceUpdated event
                 strategy.PriceUpdated += (symbol, price) =>
                 {
                     _logger.LogInformation("Price update for {Symbol}: {Price}", symbol, price);
                 };
+
                 _strategies.Add(strategy);
             }
             catch (Exception ex)
@@ -44,7 +54,7 @@ public class MultiSymbolFeedHostedService : IHostedService
             }
         }
 
-        // Start all strategies concurrently.
+        // Start all strategies concurrently
         var tasks = _strategies.Select(s => s.StartAsync(_cts.Token));
         await Task.WhenAll(tasks);
     }
@@ -55,6 +65,7 @@ public class MultiSymbolFeedHostedService : IHostedService
         {
             _cts.Cancel();
         }
+
         var tasks = _strategies.Select(s => s.StopAsync(cancellationToken));
         await Task.WhenAll(tasks);
     }
